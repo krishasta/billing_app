@@ -1,0 +1,43 @@
+name: Build iOS .ipa
+
+on:
+  workflow_dispatch: # Allows manual 1-click trigger from GitHub Actions tab
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-ios:
+    name: Build iOS .ipa
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: billing_app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build iOS App (.ipa package)
+        run: |
+          flutter build ios --release --no-codesign
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r billing_app.ipa Payload
+
+      - name: Upload .ipa as Downloadable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: billing_app-ipa
+          path: billing_app/build/ios/iphoneos/billing_app.ipa
