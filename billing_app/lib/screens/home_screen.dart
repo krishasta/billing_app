@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/bill.dart';
 import '../models/shop_profile.dart';
 import '../services/storage_service.dart';
+import '../services/google_sheets_service.dart';
 import 'new_bill_screen.dart';
 import 'history_screen.dart';
 import 'product_list_screen.dart';
@@ -18,41 +20,113 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   ShopProfile? _profile;
   List<Bill> _recentBills = [];
+  int _totalProductCount = 0;
   bool _isLoading = true;
+  bool _isSyncing = false;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _silentGoogleSheetSync();
+  }
+
+  Future<void> _silentGoogleSheetSync() async {
+    final result = await GoogleSheetsService.syncProducts();
+    if (mounted && result.success) {
+      _loadData();
+    }
   }
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final prof = await StorageService.getShopProfile();
     final bills = await StorageService.getBills();
+    final products = await StorageService.getProducts();
+    if (!mounted) return;
     setState(() {
       _profile = prof;
       _recentBills = bills.take(5).toList();
+      _totalProductCount = products.length;
       _isLoading = false;
     });
   }
+
+  Future<void> _manualSync() async {
+    setState(() => _isSyncing = true);
+    final result = await GoogleSheetsService.syncProducts();
+    if (!mounted) return;
+    await _loadData();
+    if (!mounted) return;
+    setState(() => _isSyncing = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.message),
+        backgroundColor: result.success ? Colors.green.shade700 : Colors.orange.shade800,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF8B1E0F)),
+        ),
       );
     }
 
     final shop = _profile!;
+    final currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(shop.shopName),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: const Text('🪔', style: TextStyle(fontSize: 16)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    shop.shopName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const Text(
+                    'SIVAKASI · DIRECT FACTORY BILLING',
+                    style: TextStyle(fontSize: 10, letterSpacing: 0.8, color: Colors.amberAccent),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.cloud_sync_rounded),
+            tooltip: 'Sync Products from Google Sheet',
+            onPressed: _isSyncing ? null : _manualSync,
+          ),
+          IconButton(
+            icon: const Icon(Icons.tune_rounded),
             tooltip: 'Shop Settings',
             onPressed: () async {
               final updated = await Navigator.of(context).push(
@@ -64,25 +138,59 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadData,
+        color: const Color(0xFF8B1E0F),
+        onRefresh: _manualSync,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           children: [
+            // Top Festive Announcement Ticker (Matches fire-crackers web app)
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF281810),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.4)),
+              ),
+              child: const Row(
+                children: [
+                  Text('✨', style: TextStyle(fontSize: 14)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Diwali 2026 Live · 81% Flat Catalogue Discount · Instant PDF & WhatsApp',
+                      style: TextStyle(
+                        color: Color(0xFFFDE68A),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text('🔥', style: TextStyle(fontSize: 14)),
+                ],
+              ),
+            ),
+
             // Top Festive Banner Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF8B0000), Color(0xFFD32F2F), Color(0xFFFF6F00)],
+                  colors: [
+                    Color(0xFF7A1507),
+                    Color(0xFF9E1B1B),
+                    Color(0xFFD97706),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF8B0000).withValues(alpha: 0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    color: const Color(0xFF8B1E0F).withValues(alpha: 0.35),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
@@ -95,69 +203,119 @@ class _HomeScreenState extends State<HomeScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.black26,
+                          color: Colors.black.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white24),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.offline_pin, color: Colors.greenAccent, size: 14),
+                            Icon(Icons.verified_rounded, color: Colors.greenAccent, size: 14),
                             SizedBox(width: 4),
                             Text(
-                              '100% Offline App',
+                              'PESO Safe · 100% Offline',
                               style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
                       ),
-                      Text(
-                        'Default ${shop.defaultDiscountPercent.toStringAsFixed(0)}% Off',
-                        style: const TextStyle(
-                          color: Colors.amberAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${shop.defaultDiscountPercent.toStringAsFixed(0)}% OFF',
+                          style: const TextStyle(
+                            color: Color(0xFF92400E),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   Text(
                     shop.shopName,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
+                      fontSize: 23,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.4,
                     ),
                   ),
                   if (shop.tagline.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       shop.tagline,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: const TextStyle(color: Color(0xFFFFE4D6), fontSize: 12.5),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Icon(Icons.phone, color: Colors.amber, size: 16),
-                      const SizedBox(width: 6),
-                      Text(shop.phone, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                      if (shop.upiId.isNotEmpty) ...[
-                        const SizedBox(width: 14),
-                        const Icon(Icons.qr_code, color: Colors.amber, size: 16),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.phone_in_talk_rounded, color: Color(0xFFFCD34D), size: 15),
                         const SizedBox(width: 6),
-                        Text(shop.upiId, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                        Text(
+                          shop.phone,
+                          style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+                        ),
+                        if (shop.upiId.isNotEmpty) ...[
+                          const SizedBox(width: 14),
+                          const Icon(Icons.qr_code_2_rounded, color: Color(0xFFFCD34D), size: 15),
+                          const SizedBox(width: 6),
+                          Text(
+                            shop.upiId,
+                            style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-            // PRIMARY ACTION: NEW BILL
+            // Quick Stats Strip
+            Row(
+              children: [
+                _buildStatBadge(
+                  label: 'Items in Catalog',
+                  value: '$_totalProductCount',
+                  icon: Icons.inventory_2_outlined,
+                  color: const Color(0xFFD97706),
+                ),
+                const SizedBox(width: 10),
+                _buildStatBadge(
+                  label: 'Default Discount',
+                  value: '${shop.defaultDiscountPercent.toStringAsFixed(0)}%',
+                  icon: Icons.local_offer_outlined,
+                  color: const Color(0xFF8B1E0F),
+                ),
+                const SizedBox(width: 10),
+                _buildStatBadge(
+                  label: 'Recent Bills',
+                  value: '${_recentBills.length}',
+                  icon: Icons.receipt_long_outlined,
+                  color: const Color(0xFF047857),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 18),
+
+            // HERO ACTION: CREATE NEW BILL
             InkWell(
               onTap: () async {
                 await Navigator.of(context).push(
@@ -165,68 +323,83 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
                 _loadData();
               },
+              borderRadius: BorderRadius.circular(16),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B0000),
-                  borderRadius: BorderRadius.circular(14),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B1E0F), Color(0xFFB91C1C)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF8B0000).withValues(alpha: 0.3),
-                      blurRadius: 8,
+                      color: const Color(0xFF8B1E0F).withValues(alpha: 0.4),
+                      blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.white24,
-                      radius: 24,
-                      child: Icon(Icons.receipt_long, color: Colors.white, size: 28),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.point_of_sale_rounded, color: Colors.white, size: 28),
                     ),
-                    SizedBox(width: 16),
-                    Expanded(
+                    const SizedBox(width: 16),
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'CREATE NEW BILL',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                'CREATE NEW BILL',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              Text('🚀', style: TextStyle(fontSize: 14)),
+                            ],
                           ),
-                          SizedBox(height: 2),
+                          SizedBox(height: 3),
                           Text(
-                            'Select crackers, apply discounts & send PDF',
-                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                            'Select crackers, auto-calculate 81% net & export PDF',
+                            style: TextStyle(color: Color(0xFFFFECE0), fontSize: 11.5),
                           ),
                         ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 18),
+                    const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 18),
                   ],
                 ),
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-            // 2-GRID SHORTCUTS
+            // 2-GRID ACTION TILES
             Row(
               children: [
                 Expanded(
                   child: _buildActionTile(
-                    title: 'Bill History',
-                    subtitle: 'View & Re-share Invoices',
-                    icon: Icons.history,
-                    color: const Color(0xFF1976D2),
+                    title: 'Price Catalog',
+                    subtitle: '$_totalProductCount Cracker Items',
+                    icon: Icons.category_rounded,
+                    color: const Color(0xFFD97706),
+                    badge: 'MRP / Net',
                     onTap: () async {
                       await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                        MaterialPageRoute(builder: (_) => const ProductListScreen()),
                       );
                       _loadData();
                     },
@@ -235,13 +408,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildActionTile(
-                    title: 'Price Catalog',
-                    subtitle: 'Edit Cracker MRP Rates',
-                    icon: Icons.category,
-                    color: const Color(0xFFE65100),
+                    title: 'Bill History',
+                    subtitle: 'View & Re-share Invoices',
+                    icon: Icons.history_edu_rounded,
+                    color: const Color(0xFF1D4ED8),
+                    badge: 'Reports',
                     onTap: () async {
                       await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ProductListScreen()),
+                        MaterialPageRoute(builder: (_) => const HistoryScreen()),
                       );
                       _loadData();
                     },
@@ -256,16 +430,30 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Recent Invoices',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                const Row(
+                  children: [
+                    Text(
+                      'Recent Invoices',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E130D),
+                      ),
+                    ),
+                    SizedBox(width: 6),
+                    Text('🧾', style: TextStyle(fontSize: 14)),
+                  ],
                 ),
                 if (_recentBills.isNotEmpty)
-                  TextButton(
+                  TextButton.icon(
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const HistoryScreen()),
                     ),
-                    child: const Text('View All'),
+                    icon: const Text('View All', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    label: const Icon(Icons.chevron_right, size: 18),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF8B1E0F),
+                    ),
                   ),
               ],
             ),
@@ -274,25 +462,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
             if (_recentBills.isEmpty)
               Container(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[300]!),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFEAD8C3)),
                 ),
                 child: const Column(
                   children: [
-                    Icon(Icons.receipt_outlined, size: 48, color: Colors.grey),
-                    SizedBox(height: 8),
+                    Text('🪔', style: TextStyle(fontSize: 40)),
+                    SizedBox(height: 10),
                     Text(
-                      'No bills generated yet',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black54),
+                      'No Bills Generated Yet',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Color(0xFF281810),
+                      ),
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Tap "Create New Bill" to generate your first cracker softcopy invoice.',
+                      'Tap "Create New Bill" to generate your first Diwali customer invoice.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: Color(0xFF786A5E)),
                     ),
                   ],
                 ),
@@ -301,51 +493,165 @@ class _HomeScreenState extends State<HomeScreen> {
               ...List.generate(_recentBills.length, (i) {
                 final b = _recentBills[i];
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: const Color(0xFFFFF3E0),
-                      child: Text(
-                        b.id.replaceAll('CRK-', ''),
-                        style: const TextStyle(
-                          color: Color(0xFF8B0000),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    title: Text(b.customerName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text(
-                      '${b.items.length} items • ${b.customerPhone.isNotEmpty ? b.customerPhone : "No Phone"}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
                       children: [
-                        Text(
-                          '₹${b.grandTotal.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF8B0000),
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: const Color(0xFFFEF3C7),
+                          child: Text(
+                            b.customerName.isNotEmpty ? b.customerName[0].toUpperCase() : 'C',
+                            style: const TextStyle(
+                              color: Color(0xFF92400E),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        const Text('View PDF', style: TextStyle(fontSize: 11, color: Colors.blue)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      b.customerName,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF3ECE0),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      '#${b.id.replaceAll('CRK-', '')}',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF786A5E),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '${b.items.length} items (${b.totalPiecesCount} pcs) • ${b.customerPhone.isNotEmpty ? b.customerPhone : "Direct Cash"}',
+                                style: const TextStyle(fontSize: 11.5, color: Color(0xFF6E5E52)),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                DateFormat('dd MMM, hh:mm a').format(b.date),
+                                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade500),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              currencyFormat.format(b.grandTotal),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF8B1E0F),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            InkWell(
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => BillPreviewScreen(bill: b, shop: shop),
+                                  ),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF8B1E0F).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.picture_as_pdf, size: 12, color: Color(0xFF8B1E0F)),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'PDF',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF8B1E0F),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => BillPreviewScreen(bill: b, shop: shop),
-                        ),
-                      );
-                    },
                   ),
                 );
               }),
+
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatBadge({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFEAD8C3)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 15,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 10,
+                color: Color(0xFF786A5E),
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
@@ -357,20 +663,21 @@ class _HomeScreenState extends State<HomeScreen> {
     required String subtitle,
     required IconData icon,
     required Color color,
+    required String badge,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEAD8C3)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -379,20 +686,40 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              backgroundColor: color.withValues(alpha: 0.12),
-              radius: 18,
-              child: Icon(icon, color: color, size: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                CircleAvatar(
+                  backgroundColor: color.withValues(alpha: 0.12),
+                  radius: 18,
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    badge,
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             Text(
               title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Color(0xFF1E130D),
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               subtitle,
-              style: const TextStyle(fontSize: 11, color: Colors.black54),
+              style: const TextStyle(fontSize: 11, color: Color(0xFF786A5E)),
             ),
           ],
         ),

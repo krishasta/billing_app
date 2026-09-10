@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/bill.dart';
 import '../models/bill_item.dart';
 import '../models/product.dart';
@@ -27,9 +28,13 @@ class _NewBillScreenState extends State<NewBillScreen> {
 
   String _selectedCategory = 'All';
   String _searchQuery = '';
-  double _discountPercent = 70.0;
+  double _discountPercent = 81.0;
   bool _isLoading = true;
+  bool _showCustomerDetails = true;
   late ShopProfile _shopProfile;
+
+  final currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
+  final shortCurrency = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
   @override
   void initState() {
@@ -114,99 +119,240 @@ class _NewBillScreenState extends State<NewBillScreen> {
       final matchesCategory = _selectedCategory == 'All' || p.category == _selectedCategory;
       final matchesSearch = _searchQuery.isEmpty ||
           p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          p.category.toLowerCase().contains(_searchQuery.toLowerCase());
+          p.category.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (p.subtitle != null && p.subtitle!.toLowerCase().contains(_searchQuery.toLowerCase()));
       return matchesCategory && matchesSearch;
     }).toList();
+  }
+
+  String _getCategoryEmoji(String category) {
+    switch (category) {
+      case 'All':
+        return '✨';
+      case 'One Sound Crackers':
+        return '🔥';
+      case 'Wala':
+        return '🧨';
+      case 'Bijili Crackers':
+        return '💥';
+      case 'Bomb':
+        return '💣';
+      case 'Naattu Vedi':
+        return '💥';
+      case 'Ground Chakkar':
+        return '🌀';
+      case 'Flower Pots':
+        return '🪔';
+      case 'Sky Shot Repeating':
+        return '🎆';
+      case 'Sky Shot Pack':
+        return '🚀';
+      case 'Sparklers':
+        return '✨';
+      case 'Twinkling Stars':
+        return '⭐';
+      case 'Match Box':
+        return '📦';
+      case 'Gift Box':
+      case 'Family Pack':
+        return '🎁';
+      case '2026 Series New Arrival':
+        return '🌟';
+      default:
+        return '🎆';
+    }
+  }
+
+  void _showCustomPriceDialog(Product product) {
+    final currentRate = _customUnitPrices[product.id] ?? product.price;
+    final ctrl = TextEditingController(text: currentRate.toStringAsFixed(2));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit Rate for ${product.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Original MRP: ₹${product.price.toStringAsFixed(2)} / ${product.unit}'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Unit MRP Rate (₹)',
+                prefixText: '₹ ',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _customUnitPrices.remove(product.id);
+              });
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('Reset to Default'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newRate = double.tryParse(ctrl.text.trim());
+              if (newRate != null && newRate > 0) {
+                setState(() {
+                  _customUnitPrices[product.id] = newRate;
+                });
+              }
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('Save Rate'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showCartReviewSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) {
           final items = _selectedBillItems;
-          return DraggableScrollableSheet(
-            initialChildSize: 0.75,
-            minChildSize: 0.4,
-            maxChildSize: 0.95,
-            expand: false,
-            builder: (_, scrollController) => Column(
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.75,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
               children: [
-                // Handle bar
+                // Sheet Handle
                 Container(
-                  margin: const EdgeInsets.only(top: 8, bottom: 4),
-                  width: 40,
-                  height: 4,
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 44,
+                  height: 5,
                   decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
+                // Header
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Cart Items (${items.length})',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      Row(
+                        children: [
+                          const Text(
+                            'Cart Summary',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${items.length} items',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF92400E),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.delete_sweep, color: Colors.red),
-                        label: const Text('Clear All', style: TextStyle(color: Colors.red)),
-                        onPressed: () {
-                          setState(() => _cartQuantities.clear());
-                          setSheetState(() {});
-                          Navigator.of(ctx).pop();
-                        },
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(ctx).pop(),
                       ),
                     ],
                   ),
                 ),
                 const Divider(height: 1),
+                // Items List
                 Expanded(
                   child: items.isEmpty
-                      ? const Center(child: Text('No items in cart yet'))
+                      ? const Center(child: Text('No items in cart'))
                       : ListView.separated(
-                          controller: scrollController,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.all(16),
                           itemCount: items.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1),
-                          itemBuilder: (ctx, i) {
-                            final item = items[i];
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(item.product.name,
-                                  style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: Text(
-                                '₹${item.unitPrice.toStringAsFixed(0)} / ${item.product.unit}  •  Total: ₹${item.totalPrice.toStringAsFixed(0)}',
-                                style: const TextStyle(color: Colors.black54),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
+                          separatorBuilder: (context, index) => const Divider(height: 1),
+                          itemBuilder: (ctx, idx) {
+                            final item = items[idx];
+                            final netItemRate = item.unitPrice * (1 - _discountPercent / 100);
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Row(
                                 children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                                    onPressed: () {
-                                      _updateQuantity(item.product, -1);
-                                      setSheetState(() {});
-                                    },
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.product.name,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'MRP: ₹${item.unitPrice.toStringAsFixed(2)} · Net: ₹${netItemRate.toStringAsFixed(2)} / ${item.product.unit}',
+                                          style: const TextStyle(fontSize: 11.5, color: Color(0xFF6E5E52)),
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                  // Stepper in sheet
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF3ECE0),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.remove, size: 16),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                          padding: EdgeInsets.zero,
+                                          onPressed: () {
+                                            _updateQuantity(item.product, -1);
+                                            setSheetState(() {});
+                                          },
+                                        ),
+                                        Text(
+                                          '${item.quantity}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.add, size: 16),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                          padding: EdgeInsets.zero,
+                                          onPressed: () {
+                                            _updateQuantity(item.product, 1);
+                                            setSheetState(() {});
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
                                   Text(
-                                    '${item.quantity}',
+                                    shortCurrency.format(netItemRate * item.quantity),
                                     style: const TextStyle(
-                                        fontSize: 16, fontWeight: FontWeight.bold),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.add_circle_outline, color: Colors.green),
-                                    onPressed: () {
-                                      _updateQuantity(item.product, 1);
-                                      setSheetState(() {});
-                                    },
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Color(0xFF8B1E0F),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -214,21 +360,20 @@ class _NewBillScreenState extends State<NewBillScreen> {
                           },
                         ),
                 ),
-                // Footer calculations
+                // Footer
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    border: Border(top: BorderSide(color: Colors.grey[300]!)),
+                    color: const Color(0xFFFBF8F2),
+                    border: Border(top: BorderSide(color: Colors.grey.shade300)),
                   ),
                   child: Column(
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Subtotal (Gross MRP):', style: TextStyle(color: Colors.black87)),
-                          Text('₹${_cartSubtotal.toStringAsFixed(2)}',
-                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const Text('Catalogue MRP Total:'),
+                          Text(currencyFormat.format(_cartSubtotal)),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -236,41 +381,31 @@ class _NewBillScreenState extends State<NewBillScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text('Festival Discount ($_discountPercent%):',
-                              style: const TextStyle(color: Colors.green)),
-                          Text('- ₹${_cartDiscountAmount.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                  color: Colors.green, fontWeight: FontWeight.bold)),
+                              style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                          Text('- ${currencyFormat.format(_cartDiscountAmount)}',
+                              style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      const Divider(height: 14),
+                      const Divider(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Net Payable:',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          Text('₹${_cartGrandTotal.toStringAsFixed(2)}',
+                          const Text('Net Payable Amount:',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text(currencyFormat.format(_cartGrandTotal),
                               style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF8B0000))),
+                                  fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF8B1E0F))),
                         ],
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
-                        child: ElevatedButton.icon(
+                        child: ElevatedButton(
                           onPressed: () {
                             Navigator.of(ctx).pop();
-                            _generateBill();
+                            _generateAndPreviewBill();
                           },
-                          icon: const Icon(Icons.receipt_long),
-                          label: const Text('GENERATE & SHARE BILL',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF8B0000),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
+                          child: const Text('PROCEED TO INVOICE ➔'),
                         ),
                       ),
                     ],
@@ -284,12 +419,11 @@ class _NewBillScreenState extends State<NewBillScreen> {
     );
   }
 
-  Future<void> _generateBill() async {
-    final items = _selectedBillItems;
-    if (items.isEmpty) {
+  void _generateAndPreviewBill() async {
+    if (_selectedBillItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please add at least one cracker item to the bill'),
+          content: Text('Please select at least one cracker item to generate bill!'),
           backgroundColor: Colors.red,
         ),
       );
@@ -297,26 +431,29 @@ class _NewBillScreenState extends State<NewBillScreen> {
     }
 
     final billId = await StorageService.generateNextBillId();
-    final advance = double.tryParse(_advancePaidCtrl.text.trim()) ?? 0.0;
+    final customerName = _customerNameCtrl.text.trim().isEmpty ? 'Valued Customer' : _customerNameCtrl.text.trim();
+    final customerPhone = _customerPhoneCtrl.text.trim();
+    final customerAddress = _customerAddressCtrl.text.trim();
+    final notes = _notesCtrl.text.trim();
+    final advancePaid = double.tryParse(_advancePaidCtrl.text.trim()) ?? 0.0;
 
     final bill = Bill(
       id: billId,
-      customerName: _customerNameCtrl.text.trim().isEmpty ? 'Valued Customer' : _customerNameCtrl.text.trim(),
-      customerPhone: _customerPhoneCtrl.text.trim(),
-      customerAddress: _customerAddressCtrl.text.trim(),
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerAddress: customerAddress,
       date: DateTime.now(),
-      items: items,
+      items: _selectedBillItems,
       discountPercent: _discountPercent,
-      advancePaid: advance,
-      notes: _notesCtrl.text.trim(),
+      advancePaid: advancePaid,
+      notes: notes,
     );
 
-    // Save offline
+    // Save bill to local storage
     await StorageService.saveBill(bill);
 
     if (!mounted) return;
 
-    // Navigate to preview and share screen
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => BillPreviewScreen(bill: bill, shop: _shopProfile),
@@ -328,39 +465,40 @@ class _NewBillScreenState extends State<NewBillScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFF8B1E0F))),
       );
     }
 
+    final categories = DefaultData.crackerCategories;
+    final filtered = _filteredProducts;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New Crackers Bill'),
+        title: const Text('Create New Bill'),
         actions: [
+          // Quick Cart count badge
           if (_selectedBillItems.isNotEmpty)
             Stack(
               alignment: Alignment.center,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.shopping_cart),
-                  tooltip: 'View Cart',
+                  icon: const Icon(Icons.shopping_bag_outlined),
                   onPressed: _showCartReviewSheet,
                 ),
                 Positioned(
-                  top: 8,
                   right: 8,
+                  top: 8,
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: const BoxDecoration(
-                      color: Colors.amber,
+                      color: Color(0xFFF59E0B),
                       shape: BoxShape.circle,
                     ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                     child: Text(
                       '${_selectedBillItems.length}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
+                      style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),
@@ -371,14 +509,14 @@ class _NewBillScreenState extends State<NewBillScreen> {
       bottomNavigationBar: _selectedBillItems.isEmpty
           ? null
           : Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
+                    blurRadius: 10,
+                    offset: const Offset(0, -3),
                   ),
                 ],
               ),
@@ -386,47 +524,68 @@ class _NewBillScreenState extends State<NewBillScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${_selectedBillItems.length} items ($_totalPieces pcs)',
-                            style: const TextStyle(fontSize: 12, color: Colors.black54),
-                          ),
-                          Row(
-                            children: [
-                              Text(
-                                '₹${_cartGrandTotal.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF8B0000),
+                      child: InkWell(
+                        onTap: _showCartReviewSheet,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  '${_selectedBillItems.length} items ($_totalPieces pcs)',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'MRP ₹${_cartSubtotal.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  decoration: TextDecoration.lineThrough,
-                                  color: Colors.grey,
+                                const SizedBox(width: 6),
+                                const Icon(Icons.keyboard_arrow_up, size: 16, color: Color(0xFF8B1E0F)),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Text(
+                                  shortCurrency.format(_cartGrandTotal),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF8B1E0F),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'Save ${shortCurrency.format(_cartDiscountAmount)}',
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF92400E),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    ElevatedButton.icon(
-                      onPressed: _generateBill,
-                      icon: const Icon(Icons.check_circle),
-                      label: const Text('CREATE BILL', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: _generateAndPreviewBill,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B0000),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        backgroundColor: const Color(0xFF8B1E0F),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      child: const Row(
+                        children: [
+                          Text('INVOICE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          SizedBox(width: 4),
+                          Icon(Icons.arrow_forward, size: 16),
+                        ],
                       ),
                     ),
                   ],
@@ -435,281 +594,412 @@ class _NewBillScreenState extends State<NewBillScreen> {
             ),
       body: Column(
         children: [
-          // Customer & Discount Info Accordion
-          Card(
-            margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            elevation: 1.5,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            child: ExpansionTile(
-              initiallyExpanded: false,
-              leading: const Icon(Icons.person, color: Color(0xFF8B0000)),
-              title: Text(
-                _customerNameCtrl.text.isNotEmpty
-                    ? '${_customerNameCtrl.text} (${_customerPhoneCtrl.text.isEmpty ? "No Phone" : _customerPhoneCtrl.text})'
-                    : 'Customer Details & Discount (${_discountPercent.toStringAsFixed(0)}% Off)',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                'Discount: ${_discountPercent.toStringAsFixed(0)}%  •  Advance: ₹${_advancePaidCtrl.text}',
-                style: const TextStyle(fontSize: 12, color: Colors.black54),
-              ),
+          // 1. Collapsible Customer & Discount Info Card
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFEAD8C3)),
+            ),
+            child: Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _customerNameCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Customer Name',
-                                prefixIcon: Icon(Icons.person_outline),
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              onChanged: (_) => setState(() {}),
+                InkWell(
+                  onTap: () => setState(() => _showCustomerDetails = !_showCustomerDetails),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.person_pin_rounded, color: Color(0xFF8B1E0F), size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              _customerNameCtrl.text.isEmpty
+                                  ? 'Customer Details & Discount ($_discountPercent%)'
+                                  : '${_customerNameCtrl.text} (${_customerPhoneCtrl.text.isEmpty ? "No Phone" : _customerPhoneCtrl.text}) · $_discountPercent% Off',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: _customerPhoneCtrl,
-                              keyboardType: TextInputType.phone,
-                              decoration: const InputDecoration(
-                                labelText: 'Mobile / WhatsApp',
-                                prefixIcon: Icon(Icons.phone_android),
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              onChanged: (_) => setState(() {}),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _customerAddressCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'City / Place',
-                                prefixIcon: Icon(Icons.location_city),
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: _advancePaidCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'Advance Paid (₹)',
-                                prefixIcon: Icon(Icons.paid),
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              onChanged: (_) => setState(() {}),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // Quick Discount Selector
-                      Row(
-                        children: [
-                          const Text('Discount: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 8),
-                          ...[70.0, 75.0, 80.0, 81.0, 85.0].map((d) {
-                            final isSel = _discountPercent == d;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: ChoiceChip(
-                                label: Text(d == 81.0 ? '81% (Standard)' : '${d.toInt()}%'),
-                                selected: isSel,
-                                selectedColor: const Color(0xFF8B0000),
-                                labelStyle: TextStyle(
-                                  color: isSel ? Colors.white : Colors.black,
-                                  fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                                  fontSize: 12,
-                                ),
-                                onSelected: (_) => setState(() => _discountPercent = d),
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                        Icon(
+                          _showCustomerDetails ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                          color: const Color(0xFF786A5E),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
+                if (_showCustomerDetails) ...[
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: TextField(
+                                controller: _customerNameCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Customer Name',
+                                  prefixIcon: Icon(Icons.person_outline, size: 18),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: _customerPhoneCtrl,
+                                keyboardType: TextInputType.phone,
+                                decoration: const InputDecoration(
+                                  labelText: 'Mobile No.',
+                                  prefixIcon: Icon(Icons.phone_android, size: 18),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _customerAddressCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'City / Delivery Location',
+                                  prefixIcon: Icon(Icons.location_on_outlined, size: 18),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _advancePaidCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Advance Paid (₹)',
+                                  prefixIcon: Icon(Icons.payments_outlined, size: 18),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        // Quick Discount Selector Pills
+                        Row(
+                          children: [
+                            const Text('Discount:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [70.0, 75.0, 80.0, 81.0, 85.0].map((d) {
+                                    final isSelected = _discountPercent == d;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: ChoiceChip(
+                                        label: Text('${d.toStringAsFixed(0)}%'),
+                                        selected: isSelected,
+                                        onSelected: (sel) {
+                                          if (sel) setState(() => _discountPercent = d);
+                                        },
+                                        selectedColor: const Color(0xFF8B1E0F),
+                                        labelStyle: TextStyle(
+                                          color: isSelected ? Colors.white : const Color(0xFF1E130D),
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
 
-          // Search & Filter
+          // 2. Search Box
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: TextField(
+              onChanged: (val) => setState(() => _searchQuery = val),
               decoration: InputDecoration(
-                hintText: 'Search crackers (e.g. sparklers, rockets)...',
-                prefixIcon: const Icon(Icons.search),
+                hintText: 'Search sparklers, rockets, pots, bombs...',
+                hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF9E8E81)),
+                prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFF8B1E0F)),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear),
+                        icon: const Icon(Icons.clear, size: 18),
                         onPressed: () => setState(() => _searchQuery = ''),
                       )
                     : null,
+                filled: true,
+                fillColor: Colors.white,
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
               ),
-              onChanged: (val) => setState(() => _searchQuery = val),
             ),
           ),
 
-          // Category Chips
+          // 3. Category Horizontal Pills
           SizedBox(
-            height: 38,
+            height: 46,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              itemCount: DefaultData.crackerCategories.length,
-              itemBuilder: (ctx, i) {
-                final cat = DefaultData.crackerCategories[i];
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              itemCount: categories.length,
+              itemBuilder: (ctx, idx) {
+                final cat = categories[idx];
                 final isSelected = _selectedCategory == cat;
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3),
                   child: FilterChip(
-                    selected: isSelected,
+                    avatar: Text(_getCategoryEmoji(cat), style: const TextStyle(fontSize: 13)),
                     label: Text(cat),
-                    selectedColor: const Color(0xFF8B0000),
+                    selected: isSelected,
+                    onSelected: (sel) => setState(() => _selectedCategory = cat),
+                    selectedColor: const Color(0xFF8B1E0F),
                     labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
-                      fontSize: 11.5,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? Colors.white : const Color(0xFF281810),
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     ),
-                    padding: const EdgeInsets.all(2),
-                    onSelected: (selected) {
-                      setState(() => _selectedCategory = cat);
-                    },
+                    backgroundColor: Colors.white,
+                    side: BorderSide(
+                      color: isSelected ? const Color(0xFF8B1E0F) : const Color(0xFFEAD8C3),
+                    ),
+                    showCheckmark: false,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   ),
                 );
               },
             ),
           ),
 
-          const Divider(height: 8),
+          const SizedBox(height: 4),
 
-          // Products List with Stepper
+          // 4. Products List
           Expanded(
-            child: _filteredProducts.isEmpty
-                ? const Center(child: Text('No crackers found matching search'))
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
-                    itemCount: _filteredProducts.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (ctx, index) {
-                      final p = _filteredProducts[index];
+            child: filtered.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No matching cracker items found.',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                    itemCount: filtered.length,
+                    itemBuilder: (ctx, idx) {
+                      final p = filtered[idx];
+                      final unitPrice = _customUnitPrices[p.id] ?? p.price;
+                      final netPrice = unitPrice * (1 - _discountPercent / 100);
                       final qty = _cartQuantities[p.id] ?? 0;
-                      final isSelected = qty > 0;
+                      final isCustomRate = _customUnitPrices.containsKey(p.id);
 
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFFFFF8E1) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          title: Text(
-                            p.name,
-                            style: TextStyle(
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                              fontSize: 14.5,
-                            ),
-                          ),
-                          subtitle: Text(
-                            '${p.unit} • MRP: ₹${p.price.toStringAsFixed(0)} (After ${_discountPercent.toInt()}%: ₹${(p.price * (1 - _discountPercent / 100)).toStringAsFixed(0)})',
-                            style: const TextStyle(fontSize: 12, color: Colors.black54),
-                          ),
-                          trailing: qty == 0
-                              ? ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF8B0000),
-                                    foregroundColor: Colors.white,
-                                    visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                                  ),
-                                  onPressed: () => _updateQuantity(p, 1),
-                                  child: const Text('+ ADD'),
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              // Left info
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.remove_circle, color: Colors.red, size: 26),
-                                      onPressed: () => _updateQuantity(p, -1),
-                                    ),
-                                    InkWell(
-                                      onTap: () {
-                                        // Quick input dialog
-                                        final qtyCtrl = TextEditingController(text: '$qty');
-                                        showDialog(
-                                          context: context,
-                                          builder: (ctx) => AlertDialog(
-                                            title: Text('Quantity for ${p.name}'),
-                                            content: TextField(
-                                              controller: qtyCtrl,
-                                              keyboardType: TextInputType.number,
-                                              autofocus: true,
-                                              decoration: const InputDecoration(
-                                                labelText: 'Number of units',
-                                                border: OutlineInputBorder(),
-                                              ),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF3ECE0),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            p.category,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF786A5E),
                                             ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.of(ctx).pop(),
-                                                child: const Text('Cancel'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () {
-                                                  final val = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-                                                  _setDirectQuantity(p, val);
-                                                  Navigator.of(ctx).pop();
-                                                },
-                                                child: const Text('Set'),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(color: const Color(0xFF8B0000), width: 1.2),
-                                          borderRadius: BorderRadius.circular(4),
-                                          color: Colors.white,
-                                        ),
-                                        child: Text(
-                                          '$qty',
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF8B0000),
                                           ),
                                         ),
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFE8F5E9),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            'Eco Safe',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF2E7D32),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      p.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14.5,
+                                        color: Color(0xFF1E130D),
                                       ),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.add_circle, color: Colors.green, size: 26),
-                                      onPressed: () => _updateQuantity(p, 1),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '₹${netPrice.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w900,
+                                            color: Color(0xFF8B1E0F),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '₹${unitPrice.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            decoration: TextDecoration.lineThrough,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '/ ${p.unit}',
+                                          style: const TextStyle(fontSize: 11, color: Color(0xFF786A5E)),
+                                        ),
+                                        if (isCustomRate) ...[
+                                          const SizedBox(width: 6),
+                                          const Text(
+                                            '(Custom)',
+                                            style: TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined, size: 14, color: Colors.grey),
+                                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                          padding: EdgeInsets.zero,
+                                          tooltip: 'Edit unit rate',
+                                          onPressed: () => _showCustomPriceDialog(p),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
+                              ),
+
+                              // Right Stepper Button
+                              if (qty == 0)
+                                ElevatedButton.icon(
+                                  onPressed: () => _updateQuantity(p, 1),
+                                  icon: const Icon(Icons.add, size: 15),
+                                  label: const Text('ADD', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF8B1E0F),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  ),
+                                )
+                              else
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF8B1E0F),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.remove, size: 16, color: Colors.white),
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                        padding: EdgeInsets.zero,
+                                        onPressed: () => _updateQuantity(p, -1),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () {
+                                          // Prompt quick number edit
+                                          final qtyCtrl = TextEditingController(text: '$qty');
+                                          showDialog(
+                                            context: context,
+                                            builder: (dialogCtx) => AlertDialog(
+                                              title: Text('Quantity for ${p.name}'),
+                                              content: TextField(
+                                                controller: qtyCtrl,
+                                                keyboardType: TextInputType.number,
+                                                autofocus: true,
+                                                decoration: InputDecoration(
+                                                  labelText: 'Quantity (${p.unit})',
+                                                  border: const OutlineInputBorder(),
+                                                ),
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                                                  child: const Text('Cancel'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () {
+                                                    final val = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+                                                    _setDirectQuantity(p, val);
+                                                    Navigator.of(dialogCtx).pop();
+                                                  },
+                                                  child: const Text('Set'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          child: Text(
+                                            '$qty',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.add, size: 16, color: Colors.white),
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                        padding: EdgeInsets.zero,
+                                        onPressed: () => _updateQuantity(p, 1),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       );
                     },
