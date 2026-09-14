@@ -10,7 +10,7 @@ class GoogleSheetsService {
 
   // Default Apps Script Web App URL
   static const String defaultWebAppUrl =
-      'https://script.google.com/macros/s/AKfycby5hzPSmNnOjhAN9c3wxJPJPEeOWccavWNhrcGh8AMBpqVkz6mmT4Kz3SUBSrZQpRZKMQ/exec';
+      'https://script.google.com/macros/s/AKfycbz9eqqXaaBaDKZqwjW0r_6cIAwe872MsgDmuPKKaKj8uEXhwmkhOb4xxSPLYLbVt_EX/exec';
 
   /// Get the configured Google Sheet / Web App URL
   static Future<String> getSheetUrl() async {
